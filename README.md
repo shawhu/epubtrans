@@ -1,1 +1,1 @@
-# epubtrans
+# EPUB EBook Extractor and Translator
