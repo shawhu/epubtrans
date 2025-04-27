@@ -16,6 +16,9 @@
 # Mono auto generated files
 mono_crash.*
 
+#my ignores
+*.epub
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
