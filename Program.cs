@@ -1,6 +1,8 @@
 ﻿using VersOne.Epub;
 using HtmlAgilityPack;
 using TextCopy;
+using System.Net;
+using System.Diagnostics;
 
 
 namespace EpubTrans
@@ -9,6 +11,9 @@ namespace EpubTrans
     {
         static async Task Main(string[] args)
         {
+            //debug
+            //args = ["Brie1012.epub", "-nofilter", "22"];
+
             if (args.Length < 1)
             {
                 Console.WriteLine("EPUB EBook Content Extractor/translator");
@@ -46,32 +51,69 @@ namespace EpubTrans
                 Console.WriteLine("Error: No chapters or navigation found in this EPUB.");
                 return;
             }
+            //handle args
+            bool asHtml = args.Length >= 3 && args.Any(arg => arg.Equals("-html", StringComparison.OrdinalIgnoreCase));
+            bool getAllchapters = args.Length >= 2 && args.Any(arg => arg.Equals("-nofilter", StringComparison.OrdinalIgnoreCase));
 
             // Flatten all chapters (including nested)
             var flatChapters = new List<EpubNavigationItem>();
             FlattenChapters(epubBook.Navigation, flatChapters);
 
             // Filter: only chapters whose title contains a digit
-            var filteredChapters = ChapterFilter(flatChapters);
-
-            if (filteredChapters.Count == 0)
+            List<EpubNavigationItem> filteredChapters;
+            if (getAllchapters)
             {
-                Console.WriteLine("No chapters contain numbers in their titles.");
-                return;
+                filteredChapters = flatChapters;
+                if (filteredChapters.Count == 0)
+                {
+                    Console.WriteLine("Can't find any chapters in the ebook.");
+                    return;
+                }
+            }
+            else
+            {
+                filteredChapters = ChapterFilter(flatChapters);
+                if (filteredChapters.Count == 0)
+                {
+                    Console.WriteLine("No chapters contain numbers in their titles.");
+                    return;
+                }
             }
 
-            if (args.Length == 1)
+
+
+            if (args.Length >= 1 && args.Length <= 2)
             {
                 Console.WriteLine($"Title: {epubBook.Title}");
                 Console.WriteLine("Filtered Chapters (title contains a digit):");
                 for (int i = 0; i < filteredChapters.Count; i++)
                 {
-                    Console.WriteLine($"{i + 1}. {filteredChapters[i].Title}");
+                    Console.Write($"{i + 1}. {filteredChapters[i].Title}\t\t\t");
+                    var navfilepath = filteredChapters[i].Link?.ContentFilePath ?? "";
+                    var contentfile = !string.IsNullOrEmpty(navfilepath)
+                        ? epubBook.ReadingOrder.FirstOrDefault(f =>
+                            string.Equals(f.FilePath.Replace('\\', '/'), navfilepath.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                        : null;
+                    if (contentfile != null)
+                    {
+                        var doc = new HtmlDocument();
+                        doc.LoadHtml(contentfile.Content);
+                        var bodyNode = doc.DocumentNode.SelectSingleNode("//body");
+                        var bodyText = bodyNode?.InnerText.Trim() ?? "";
+                        Console.Write($"{bodyText.Length}");
+                    }
+                    Console.WriteLine("");
                 }
                 return;
             }
 
-            if (!int.TryParse(args[1], out int chapterIndex) || chapterIndex < 1 || chapterIndex > filteredChapters.Count)
+            int chapterIndex = 0;
+            if (!int.TryParse(args[1], out chapterIndex))
+            {
+                int.TryParse(args[2], out chapterIndex);
+            }
+
+            if (chapterIndex < 1 || chapterIndex > filteredChapters.Count)
             {
                 Console.WriteLine("Error: Invalid chapter number.");
                 return;
@@ -91,7 +133,7 @@ namespace EpubTrans
                 return;
             }
 
-            bool asHtml = args.Length >= 3 && args.Any(arg => arg.Equals("-html", StringComparison.OrdinalIgnoreCase));
+
 
             string outputText = "";
             if (!asHtml)
@@ -100,6 +142,7 @@ namespace EpubTrans
                 doc.LoadHtml(contentFile.Content);
                 var bodyNode = doc.DocumentNode.SelectSingleNode("//body");
                 outputText = bodyNode?.InnerText.Trim() ?? "";
+                outputText = WebUtility.HtmlDecode(outputText);
             }
             else
             {
@@ -107,6 +150,15 @@ namespace EpubTrans
             }
             Console.WriteLine(outputText);
             ClipboardService.SetText(outputText);
+
+            //launch a browser
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://poe.com/CuckooCallingR4TA",
+                UseShellExecute = true
+            });
+
+
         }
 
         // Recursively flattens all chapters and subchapters into a single list
